@@ -21,22 +21,28 @@ angular.module('brushfire_videosPage').controller('PageCtrl', [
     $scope.submitVideosError = false;
 
     // Get the existing videos.
-    $http.get('/video')
-      .then(function onSuccess(sailsResponse) {
-        $scope.videos = sailsResponse.data;
-      })
-      .catch(function onError(sailsResponse) {
-
-        if (sailsResponse.data.status === '404') {
-          return;
-        }
-
-        console.log("An unexpected error occurred: " + sailsResponse.data.statusText);
-
-      })
-      .finally(function eitherWay() {
-        $scope.videosLoading = false;
+    io.socket.get('/video', function whenServerResponds(data, JWR) { //#A
+      $scope.videosLoading = false;
+      if (JWR.statusCode >= 400) {
+        $scope.submitVideosError = true;
+        console.log('something bad happened');
+        //#B
+        return;
+      }
+      $scope.videos = data.reverse();
+      console.log(data);
+      $scope.$apply();
+      //#C
+      //#D
+      io.socket.on('video', function whenAVideoIsCreatedUpdatedOrDestroyed(event) { //#E
+        $scope.videos.unshift({
+          //#F
+          title: event.data.title,
+          src: event.data.src,
+        });
+        $scope.$apply();
       });
+    });
 
     ///////////////////////////////////////////////////////////////
     // SET UP LISTENERS FOR DOM EVENTS
@@ -97,22 +103,21 @@ angular.module('brushfire_videosPage').controller('PageCtrl', [
       // (also disables form submission)
       $scope.busySubmittingVideo = true;
 
-      $http.post('/video', {
-          title: _newVideo.title,
-          src: _newVideo.src
-        })
-        .then(function onSuccess(sailsResponse) {
-          console.log(sailsResponse);
-          $scope.videos.unshift(_newVideo);
-        })
-        .catch(function onError(sailsResponse) {
-          console.log("An unexpected error occurred: " + sailsResponse.data.statusText);
-        })
-        .finally(function eitherWay() {
-          $scope.busySubmittingVideo = false;
-          $scope.newVideoTitle = '';
-          $scope.newVideoSrc = '';
-        });
+      io.socket.post('/video', {
+        title: _newVideo.title,
+        src: _newVideo.src
+      }, function whenServerResponds(data, JWR) {
+        $scope.videosLoading = false;
+        if (JWR.statusCode >= 400) {
+          console.log('something bad happened');
+          return;
+        }
+        $scope.videos.unshift(_newVideo);
+        $scope.busySubmittingVideo = false;
+        $scope.newVideoTitle = '';
+        $scope.newVideoSrc = '';
+        $scope.$apply();
+      });
 
     };
   }
